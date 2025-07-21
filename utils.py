@@ -4,8 +4,8 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageNotModified, MessageToDeleteNotFound, BadRequest
 from aiogram import Bot # Імпортуємо Bot для типізації
-import motor.motor_asyncio # Додано імпорт motor для get_next_sequence_value
 import logging # Додано імпорт logging
+import asyncio # Додано імпорт asyncio для затримки
 
 # Регулярний вираз для перевірки номера телефону (приклад: +380XXXXXXXXX)
 # Це вже використовується в main.py, але залишено тут як приклад, якщо потрібно буде знову
@@ -28,8 +28,9 @@ def escape_markdown_v2(text: str) -> str:
 
 async def update_or_send_interface_message(bot_obj: Bot, chat_id: int, state: FSMContext, text: str, reply_markup=None, parse_mode='HTML', disable_web_page_preview: bool = False):
     """
-    Редагує останнє повідомлення бота або надсилає нове, якщо редагування неможливе.
-    Перед надсиланням нового повідомлення намагається видалити попереднє повідомлення бота.
+    Видаляє попереднє повідомлення бота (якщо воно є) і надсилає нове.
+    Зберігає message_id нового повідомлення бота у стані.
+    Приймає об'єкт bot як перший аргумент.
     """
     data = await state.get_data()
     last_bot_message_id = data.get('last_bot_message_id')
@@ -39,13 +40,17 @@ async def update_or_send_interface_message(bot_obj: Bot, chat_id: int, state: FS
         try:
             await bot_obj.delete_message(chat_id=chat_id, message_id=last_bot_message_id)
             logging.info(f"Deleted old message {last_bot_message_id} for user {chat_id}.")
-            await state.update_data(last_bot_message_id=None) # Очищаємо ID після видалення
+            # Додаємо дуже коротку затримку, щоб дати Telegram клієнту час на обробку видалення
+            # Це може допомогти уникнути візуальних артефактів, хоча видалення зазвичай миттєве.
+            await asyncio.sleep(0.01) 
         except MessageToDeleteNotFound:
             logging.warning(f"Message {last_bot_message_id} not found to delete for user {chat_id}. It might have been deleted by user or Telegram.")
-            await state.update_data(last_bot_message_id=None) # Очищаємо ID, якщо не знайдено
         except Exception as e:
             logging.error(f"Error deleting message {last_bot_message_id} for user {chat_id}: {e}", exc_info=True)
-            # Якщо не вдалося видалити, все одно спробуємо надіслати нове повідомлення
+        finally:
+            # Завжди очищаємо last_bot_message_id після спроби видалення,
+            # щоб наступне повідомлення завжди надсилалося як нове.
+            await state.update_data(last_bot_message_id=None) 
 
     # Надсилаємо нове повідомлення
     try:
@@ -60,21 +65,9 @@ async def update_or_send_interface_message(bot_obj: Bot, chat_id: int, state: FS
         logging.info(f"Sent new interface message for user {chat_id}. Message ID: {message.message_id}")
     except Exception as e:
         logging.error(f"Failed to send new interface message for user {chat_id}: {e}", exc_info=True)
-        # У випадку будь-якої іншої непередбаченої помилки, спробуйте надіслати нове повідомлення як останній варіант
-        # Цей блок може бути надлишковим, оскільки ми вже намагаємося send_message вище.
-        # Можна залишити для додаткової надійності, якщо перша спроба send_message також впала.
-        try:
-            message = await bot_obj.send_message( 
-                chat_id=chat_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode,
-                disable_web_page_preview=disable_web_page_preview
-            )
-            await state.update_data(last_bot_message_id=message.message_id)
-            logging.info(f"Sent new interface message (after unexpected error) for user {chat_id}. Message ID: {message.message_id}")
-        except Exception as inner_e:
-            logging.critical(f"CRITICAL: Failed to send message even after retry for user {chat_id}: {inner_e}", exc_info=True)
+        # У випадку критичної помилки надсилання нового повідомлення, логуємо і не оновлюємо state
+        # (щоб не перезаписати last_bot_message_id на None, якщо повідомлення не було надіслано)
+        pass
 
 
 def can_edit(post: dict) -> bool:
