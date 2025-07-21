@@ -18,7 +18,7 @@ if not MONGO_DB_URL:
 WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', '[https://your-domain.com](https://your-domain.com)') # Замініть на ваш домен
 WEBHOOK_PATH = os.getenv('WEBHOOK_PATH', '/webhook') # Шлях вебхука, не включає API_TOKEN
 WEBAPP_HOST = os.getenv('WEBAPP_HOST', '0.0.0.0') # Для прослуховування всіх інтерфейсів
-WEBAPP_PORT = int(os.getenv('WEBAPP_PORT', 8000))
+WEBAPP_PORT = int(os.getenv('WEBAPP_PORT', 8080))
 
 # Налаштування пагінації
 MY_POSTS_PER_PAGE = 5
