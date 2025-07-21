@@ -9,14 +9,14 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotModified, MessageToDeleteNotFound
 
-import motor.motor_asyncio
+import motor.motor_asyncio # Залишаємо цей імпорт тут, оскільки він використовується для типізації глобальних змінних
 from motor.core import AgnosticClient, AgnosticDatabase
 
 # Імпорт модулів бота
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
 from states import AppStates
 from keyboards import main_kb, categories_kb, confirm_add_post_kb, post_actions_kb, edit_post_kb, pagination_kb, confirm_delete_kb, back_kb, type_kb, contact_kb
-from utils import escape_markdown_v2, update_or_send_interface_message, can_edit, get_next_sequence_value # get_next_sequence_value перенесено в utils
+from utils import escape_markdown_v2, update_or_send_interface_message, can_edit, get_next_sequence_value
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -56,7 +56,6 @@ async def init_db_connection():
         logging.info("Створено унікальний індекс на 'id' для колекції 'posts'.")
 
         # Індекс для колекції лічильників (автоматично _id)
-        # Поле _id вже є унікальним за замовчуванням, тому unique=True не потрібен
         await db.counters.create_index("_id")
         logging.info("Створено унікальний індекс на '_id' для колекції 'counters'.")
 
