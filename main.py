@@ -19,6 +19,8 @@ from pymongo import DESCENDING, ASCENDING, ReturnDocument
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
 from states import AppStates
 from keyboards import main_kb, categories_kb, confirm_add_post_kb, post_actions_kb, edit_post_kb, pagination_kb, confirm_delete_kb, back_kb, type_kb, contact_kb
+
+# Імпортуємо update_or_send_interface_message, can_edit, get_next_sequence_value з utils
 from utils import escape_markdown_v2, update_or_send_interface_message, can_edit, get_next_sequence_value
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -121,7 +123,8 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
         
         full_text = (f"📋 **{escape_markdown_v2(cat)}** \\(Сторінка {escape_markdown_v2(current_page)}/{escape_markdown_v2(total_pages)}\\)\n\n")
         
-        combined_keyboard = InlineKeyboardMarkup(row_width=1) 
+        # Використовуємо pagination_kb для створення кнопок пагінації
+        combined_keyboard = pagination_kb(total_posts, offset, VIEW_POSTS_PER_PAGE, 'viewpage', cat)
 
         for i, p in enumerate(page_posts):
             type_emoji = TYPE_EMOJIS.get(p['type'], '') 
@@ -144,19 +147,6 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
             
             if i < len(page_posts) - 1:
                 full_text += "\n—\n\n" 
-
-        # Додаємо кнопки пагінації
-        nav_row_page_footer = []
-        if offset > 0:
-            nav_row_page_footer.append(InlineKeyboardButton("⬅️ Попередня", callback_data=f"viewpage_{offset - VIEW_POSTS_PER_PAGE}"))
-        if offset + VIEW_POSTS_PER_PAGE < total_posts:
-            nav_row_page_footer.append(InlineKeyboardButton("Наступна ➡️", callback_data=f"viewpage_{offset + VIEW_POSTS_PER_PAGE}"))
-        
-        if nav_row_page_footer:
-            combined_keyboard.row(*nav_row_page_footer)
-            
-        combined_keyboard.add(InlineKeyboardButton("⬅️ Назад до категорій", callback_data="go_back_to_prev_step"))
-        combined_keyboard.add(InlineKeyboardButton("🏠 Головне меню", callback_data="go_back_to_main_menu"))
         
         await update_or_send_interface_message(bot_obj, chat_id, state, full_text, combined_keyboard, parse_mode='MarkdownV2', disable_web_page_preview=True)
 
@@ -226,17 +216,13 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
             if i < len(page_posts) - 1:
                 full_text += "\n—\n\n"
 
-        nav_row_page_footer = []
-        if offset > 0:
-            nav_row_page_footer.append(InlineKeyboardButton("⬅️ Попередня", callback_data=f"mypage_{offset - MY_POSTS_PER_PAGE}"))
-        if offset + MY_POSTS_PER_PAGE < total_posts: 
-            nav_row_page_footer.append(InlineKeyboardButton("Наступна ➡️", callback_data=f"mypage_{offset + MY_POSTS_PER_PAGE}"))
+        # Використовуємо pagination_kb для створення кнопок пагінації
+        nav_keyboard = pagination_kb(total_posts, offset, MY_POSTS_PER_PAGE, 'mypage', str(chat_id))
         
-        if nav_row_page_footer: 
-            combined_keyboard.row(*nav_row_page_footer)
+        # Додаємо кнопки навігації до основної клавіатури
+        for row in nav_keyboard.inline_keyboard:
+            combined_keyboard.add(*row)
             
-        combined_keyboard.add(InlineKeyboardButton("🏠 Головне меню", callback_data="go_back_to_main_menu"))
-        
         await update_or_send_interface_message(bot_obj, chat_id, state, full_text, combined_keyboard, parse_mode='MarkdownV2', disable_web_page_preview=True)
 
 
@@ -306,7 +292,7 @@ async def on_back_to_prev_step(call: CallbackQuery, state: FSMContext):
         await go_to_main_menu(bot_obj, chat_id, state)
 
 # ======== Додавання оголошень ========
-@dp.callback_query_handler(lambda c: c.data == 'add_post', state="*") # Змінено state на "*"
+@dp.callback_query_handler(lambda c: c.data == 'add_post', state="*")
 async def add_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'Add Post'.")
     await call.answer()
@@ -461,7 +447,7 @@ async def add_confirm(call: CallbackQuery, state: FSMContext):
 
 
 # ======== Перегляд оголошень (Повернення до пагінації) ========
-@dp.callback_query_handler(lambda c: c.data == 'view_posts', state="*") # Змінено state на "*"
+@dp.callback_query_handler(lambda c: c.data == 'view_posts', state="*")
 async def view_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'View Posts'.")
     await call.answer()
@@ -477,7 +463,7 @@ async def view_cat(call: CallbackQuery, state: FSMContext):
     
     await state.update_data(current_view_category=cat_name, current_category_idx=idx)
     await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0)
-    await state.set_state(AppStates.ADD_CAT)
+    await state.set_state(AppStates.VIEW_LISTING) # ВИПРАВЛЕНО: Змінено стан на VIEW_LISTING
     
 @dp.callback_query_handler(lambda c: c.data.startswith('viewpage_'), state=AppStates.VIEW_LISTING)
 async def view_paginate(call: CallbackQuery, state: FSMContext):
@@ -488,7 +474,7 @@ async def view_paginate(call: CallbackQuery, state: FSMContext):
 
 
 # ======== Мої оголошення ========
-@dp.callback_query_handler(lambda c: c.data=='my_posts', state="*") # Змінено state на "*"
+@dp.callback_query_handler(lambda c: c.data=='my_posts', state="*")
 async def my_posts_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} pressed 'My Posts'.")
     await call.answer()
@@ -600,7 +586,7 @@ async def delete_post(call: CallbackQuery, state: FSMContext):
 
 
 # ======== Допомога ========
-@dp.callback_query_handler(lambda c: c.data=='help', state="*") # Змінено state на "*"
+@dp.callback_query_handler(lambda c: c.data=='help', state="*")
 async def help_handler(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} requested help.")
     await call.answer()
@@ -610,11 +596,30 @@ async def help_handler(call: CallbackQuery, state: FSMContext):
     await update_or_send_interface_message(call.message.bot, call.message.chat.id, state, "💬 Для співпраці або допомоги пишіть \\@VILARSO18", kb, parse_mode='MarkdownV2') 
     await state.set_state(AppStates.MAIN_MENU) 
 
-# ДОДАНО: Глобальний обробник для логування всіх callback_data
+# ДОДАНО: Глобальний обробник для логування всіх callback_data та обробки скинутого стану
+# Цей обробник має бути ПІСЛЯ всіх інших специфічних callback_query_handler-ів
 @dp.callback_query_handler(state="*")
 async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
-    logging.info(f"DEBUG: Unhandled callback_data received: {call.data} from user {call.from_user.id} in state {await state.get_state()}")
-    await call.answer()
+    current_state = await state.get_state()
+    logging.info(f"DEBUG: Unhandled callback_data received: {call.data} from user {call.from_user.id} in state {current_state}")
+
+    # Перевіряємо, чи стан користувача None (сесія скинута)
+    if current_state is None:
+        # Перевіряємо, чи callback_data схожа на ту, що очікується в певних станах
+        # Це можуть бути кнопки, які не є кнопками головного меню (які вже state="*")
+        sub_menu_callbacks = [
+            'type_', 'post_cat_', 'view_cat_', 'viewpage_', 'mypage_',
+            'edit_', 'delete_', 'skip_cont', 'confirm_add_post', 'cancel_add_post', 'confirm_delete_', 'cancel_delete_'
+        ]
+        
+        is_sub_menu_callback = any(call.data.startswith(prefix) for prefix in sub_menu_callbacks)
+
+        if is_sub_menu_callback:
+            await call.answer("Ваша сесія була скинута. Будь ласка, почніть з головного меню.", show_alert=True)
+            await go_to_main_menu(call.message.bot, call.message.chat.id, state)
+            return # Важливо повернутися після обробки
+
+    await call.answer() # Завжди відповідаємо на callback_query, щоб уникнути "крутячогося годинника"
 
 # ======== Глобальний хендлер помилок ========
 @dp.errors_handler()
