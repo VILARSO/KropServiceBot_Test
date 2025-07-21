@@ -4,8 +4,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageNotModified, MessageToDeleteNotFound, BadRequest
 from aiogram import Bot # Імпортуємо Bot для типізації
-import motor.motor_asyncio # Додано імпорт motor для get_next_sequence_value
-from pymongo import ReturnDocument # ДОДАНО: Імпорт ReturnDocument з pymongo
+import motor.motor_asyncio
+from pymongo import ReturnDocument
+import logging # ДОДАНО: Імпорт модуля logging
 
 # Регулярний вираз для перевірки номера телефону (приклад: +380XXXXXXXXX)
 # Це вже використовується в main.py, але залишено тут як приклад, якщо потрібно буде знову
@@ -114,6 +115,6 @@ async def get_next_sequence_value(db_obj, sequence_name: str) -> int:
         {'_id': sequence_name},
         {'$inc': {'sequence_value': 1}},
         upsert=True,
-        return_document=ReturnDocument.AFTER # ВИПРАВЛЕНО: Використовуємо ReturnDocument
+        return_document=ReturnDocument.AFTER
     )
     return result['sequence_value']
