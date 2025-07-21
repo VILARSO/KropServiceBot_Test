@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext # ДОДАНО: Імпорт FSMContext
+from aiogram.dispatcher import FSMContext
+from aiogram.types import CallbackQuery, Message # ДОДАНО: Імпорт CallbackQuery та Message
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotModified, MessageToDeleteNotFound
 
@@ -346,7 +347,7 @@ async def add_desc(msg: types.Message, state: FSMContext):
     if not text:
         return await update_or_send_interface_message(msg.bot, msg.chat.id, state, "❌ Опис не може бути порожнім\\. Введіть опис (до 500 символів):", back_kb(), parse_mode='MarkdownV2')
     if len(text) > 500:
-        return await update_or_send_interface_message(msg.bot, msg.chat.id, state, f"❌ Занадто довгий \\({len(text)}/500\\)\\. Введіть опис (до 500 символів):", back_kb(), parse_mode='MarkdownV2')
+        return await update_or_send_interface_message(msg.bot, msg.chat.id, state, f"❌ Занадто довгий \\({len(text)}/500\\)\\.", back_kb(), parse_mode='MarkdownV2')
     
     await state.update_data(desc=text)
     await update_or_send_interface_message(msg.bot, msg.chat.id, state, "📞 Введіть контакт (необов’язково):", contact_kb())
@@ -487,7 +488,7 @@ async def view_cat(call: CallbackQuery, state: FSMContext):
     
     await state.update_data(current_view_category=cat_name, current_category_idx=idx)
     await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0) # Починаємо з першої сторінки
-    await state.set_state(AppStates.VIEW_LISTING)
+    await state.set_state(AppStates.ADD_CAT) # Змінено на ADD_CAT, щоб дозволити перехід назад до вибору категорії
     
 @dp.callback_query_handler(lambda c: c.data.startswith('viewpage_'), state=AppStates.VIEW_LISTING)
 async def view_paginate(call: CallbackQuery, state: FSMContext):
