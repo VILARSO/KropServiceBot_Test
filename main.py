@@ -13,7 +13,7 @@ from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotMod
 
 import motor.motor_asyncio
 from motor.core import AgnosticClient, AgnosticDatabase
-from pymongo import DESCENDING, ASCENDING, ReturnDocument # ДОДАНО: Імпорт ReturnDocument
+from pymongo import DESCENDING, ASCENDING, ReturnDocument
 
 # Імпорт модулів бота
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
@@ -662,15 +662,12 @@ async def on_startup(dp_obj):
     logging.info("Запуск бота...")
     await init_db_connection()
 
-    # 1) Видаляємо старий webhook (якщо є)
-    await bot.delete_webhook(drop_pending_updates=True)
-
-    # 2) Реєструємо новий webhook і лог
     WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-    await bot.set_webhook(WEBHOOK_URL)
+    # Видаляємо старий webhook і встановлюємо новий, скидаючи всі очікуючі оновлення
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True) # Змінено тут
     logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
 
-    # ДОДАНО: Перевірка статусу вебхука після встановлення
+    # Перевірка статусу вебхука після встановлення
     try:
         webhook_info = await bot.get_webhook_info()
         logging.info(f"DEBUG: Webhook info after setup: {webhook_info}")
