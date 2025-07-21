@@ -13,7 +13,7 @@ from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotMod
 
 import motor.motor_asyncio
 from motor.core import AgnosticClient, AgnosticDatabase
-from motor.pymongo import DESCENDING, ASCENDING # ДОДАНО: Імпорт DESCENDING та ASCENDING
+from pymongo import DESCENDING, ASCENDING # ВИПРАВЛЕНО: Імпорт DESCENDING та ASCENDING безпосередньо з pymongo
 
 # Імпорт модулів бота
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
@@ -417,7 +417,7 @@ async def add_cont(msg: types.Message, state: FSMContext):
         f"🔎 \\*Перевірте:\\*\n"
         f"{escape_markdown_v2(type_emoji)} **{escape_markdown_v2(data['type'].capitalize())}** \\| **{escape_markdown_v2(data['category'])}**\n"
         f"🔹 {escape_markdown_v2(data['desc'])}\n"
-        f"� {escape_markdown_v2(data['cont'])}"
+        f"📞 {escape_markdown_v2(data['cont'])}"
     )
     kb = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("✅ Підтвердити", callback_data="confirm_add_post"),
