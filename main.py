@@ -244,7 +244,7 @@ async def on_start(msg: types.Message, state: FSMContext):
     except Exception as e:
         logging.warning(f"Failed to delete /start command: {e}")
     
-    await state.update_data(last_bot_message_id=None)
+    await state.update_data(last_bot_message_id=None) # Очищаємо ID перед надсиланням головного меню
     await go_to_main_menu(msg.bot, msg.chat.id, state)
 
 
@@ -252,6 +252,7 @@ async def on_start(msg: types.Message, state: FSMContext):
 async def on_back_to_main(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} pressed 'Go Back to Main Menu'.")
     await call.answer()
+    await state.update_data(last_bot_message_id=None) # Очищаємо ID перед надсиланням головного меню
     await go_to_main_menu(call.message.bot, call.message.chat.id, state)
 
 
@@ -263,6 +264,9 @@ async def on_back_to_prev_step(call: CallbackQuery, state: FSMContext):
     chat_id = call.message.chat.id
     bot_obj = call.message.bot
     
+    # last_bot_message_id буде очищено в update_or_send_interface_message,
+    # тому тут не потрібно викликати call.message.delete() або state.update_data(last_bot_message_id=None)
+
     if current_state == AppStates.ADD_TYPE.state:
         await go_to_main_menu(bot_obj, chat_id, state)
     elif current_state == AppStates.ADD_CAT.state:
@@ -451,6 +455,7 @@ async def add_confirm(call: CallbackQuery, state: FSMContext):
 async def view_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'View Posts'.")
     await call.answer()
+    # last_bot_message_id буде очищено в update_or_send_interface_message
     await update_or_send_interface_message(call.message.bot, call.message.chat.id, state, "🔎 Оберіть категорію:", categories_kb(is_post_creation=False))
     await state.set_state(AppStates.VIEW_CAT)
 
@@ -478,6 +483,7 @@ async def view_paginate(call: CallbackQuery, state: FSMContext):
 async def my_posts_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} pressed 'My Posts'.")
     await call.answer()
+    # last_bot_message_id буде очищено в update_or_send_interface_message
     await show_my_posts_page(call.message.bot, call.message.chat.id, state, 0)
     await state.set_state(AppStates.MY_POSTS_VIEW)
 
@@ -605,27 +611,10 @@ async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
 
     # Перевіряємо, чи стан користувача None (сесія скинута)
     if current_state is None:
-        # Перевіряємо, чи callback_data схожа на ту, що очікується в певних станах
-        sub_menu_callbacks = [
-            'type_', 'post_cat_', 'view_cat_', 'viewpage_', 'mypage_',
-            'edit_', 'delete_', 'skip_cont', 'confirm_add_post', 'cancel_add_post', 'confirm_delete_', 'cancel_delete_'
-        ]
-        
-        is_sub_menu_callback = any(call.data.startswith(prefix) for prefix in sub_menu_callbacks)
-
-        if is_sub_menu_callback:
-            # Видаляємо попереднє повідомлення перед тим, як надіслати нове головне меню
-            try:
-                await call.message.delete()
-                logging.info(f"Deleted old message {call.message.message_id} for user {call.from_user.id} due to session reset.")
-            except MessageToDeleteNotFound:
-                logging.warning(f"Message {call.message.message_id} not found to delete for user {call.from_user.id}.")
-            except Exception as e:
-                logging.error(f"Error deleting message {call.message.message_id} for user {call.from_user.id}: {e}", exc_info=True)
-
-            await call.answer("Ваша сесія була скинута. Будь ласка, почніть з головного меню.", show_alert=True)
-            await go_to_main_menu(call.message.bot, call.message.chat.id, state)
-            return # Важливо повернутися після обробки
+        # last_bot_message_id буде очищено в update_or_send_interface_message
+        await call.answer("Ваша сесія була скинута. Будь ласка, почніть з головного меню.", show_alert=True)
+        await go_to_main_menu(call.message.bot, call.message.chat.id, state)
+        return # Важливо повернутися після обробки
 
     await call.answer() # Завжди відповідаємо на callback_query, щоб уникнути "крутячогося годинника"
 
