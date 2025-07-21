@@ -110,12 +110,16 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
                 InlineKeyboardButton("🏠 Головне меню", callback_data="go_back_to_main_menu")
             )
             text_to_send = f"У категорії «{escape_markdown_v2(cat)}» поки що немає оголошень\\."
+            # Очищаємо last_bot_message_id, щоб наступне повідомлення було новим
+            await state.update_data(last_bot_message_id=None) 
             return await update_or_send_interface_message(
                 bot_obj, chat_id, state,
                 text_to_send,
                 kb, parse_mode='MarkdownV2'
             )
 
+        # Очищаємо last_bot_message_id, щоб наступне повідомлення було новим
+        await state.update_data(last_bot_message_id=None) 
         await state.update_data(offset=offset)
         
         total_pages = (total_posts + VIEW_POSTS_PER_PAGE - 1) // VIEW_POSTS_PER_PAGE
@@ -167,8 +171,12 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
                 InlineKeyboardButton("➕ Додати оголошення", callback_data="add_post"), 
                 InlineKeyboardButton("🏠 Головне меню", callback_data="go_back_to_main_menu")
             )
+            # Очищаємо last_bot_message_id, щоб наступне повідомлення було новим
+            await state.update_data(last_bot_message_id=None)
             return await update_or_send_interface_message(bot_obj, chat_id, state, "🧐 У вас немає оголошень\\.", kb_no_posts, parse_mode='MarkdownV2')
 
+        # Очищаємо last_bot_message_id, щоб наступне повідомлення було новим
+        await state.update_data(last_bot_message_id=None)
         # Отримуємо оголошення користувача з MongoDB, сортуємо за датою та пагінуємо
         user_posts_cursor = db.posts.find(
             {'user_id': chat_id}
@@ -284,6 +292,7 @@ async def on_back_to_prev_step(call: CallbackQuery, state: FSMContext):
     elif current_state == AppStates.VIEW_CAT.state:
         await go_to_main_menu(bot_obj, chat_id, state)
     elif current_state == AppStates.VIEW_LISTING.state:
+        # last_bot_message_id буде очищено в update_or_send_interface_message
         await update_or_send_interface_message(bot_obj, chat_id, state, "🔎 Оберіть категорію:", categories_kb(is_post_creation=False))
         await state.set_state(AppStates.VIEW_CAT)
     elif current_state == AppStates.MY_POSTS_VIEW.state:
@@ -467,6 +476,8 @@ async def view_cat(call: CallbackQuery, state: FSMContext):
     await call.answer()
     
     await state.update_data(current_view_category=cat_name, current_category_idx=idx)
+    # Очищаємо last_bot_message_id, щоб наступне повідомлення було новим
+    await state.update_data(last_bot_message_id=None) 
     await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0)
     await state.set_state(AppStates.VIEW_LISTING)
     
