@@ -128,7 +128,7 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
             
             post_block = (f"ID: {escape_markdown_v2(p['id'])}\n"
                          f"{escape_markdown_v2(type_emoji)} **{escape_markdown_v2(p['type'].capitalize())}**\n"
-                         f"� {escape_markdown_v2(p['description'])}\n") 
+                         f"🔹 {escape_markdown_v2(p['description'])}\n") 
             
             if p['username']:
                 if p['username'].isdigit():
@@ -306,7 +306,7 @@ async def on_back_to_prev_step(call: CallbackQuery, state: FSMContext):
         await go_to_main_menu(bot_obj, chat_id, state)
 
 # ======== Додавання оголошень ========
-@dp.callback_query_handler(lambda c: c.data == 'add_post', state=[AppStates.MAIN_MENU, AppStates.MY_POSTS_VIEW])
+@dp.callback_query_handler(lambda c: c.data == 'add_post', state="*") # Змінено state на "*"
 async def add_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'Add Post'.")
     await call.answer()
@@ -461,7 +461,7 @@ async def add_confirm(call: CallbackQuery, state: FSMContext):
 
 
 # ======== Перегляд оголошень (Повернення до пагінації) ========
-@dp.callback_query_handler(lambda c: c.data == 'view_posts', state=AppStates.MAIN_MENU)
+@dp.callback_query_handler(lambda c: c.data == 'view_posts', state="*") # Змінено state на "*"
 async def view_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'View Posts'.")
     await call.answer()
@@ -488,7 +488,7 @@ async def view_paginate(call: CallbackQuery, state: FSMContext):
 
 
 # ======== Мої оголошення ========
-@dp.callback_query_handler(lambda c: c.data=='my_posts', state=AppStates.MAIN_MENU)
+@dp.callback_query_handler(lambda c: c.data=='my_posts', state="*") # Змінено state на "*"
 async def my_posts_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} pressed 'My Posts'.")
     await call.answer()
@@ -600,7 +600,7 @@ async def delete_post(call: CallbackQuery, state: FSMContext):
 
 
 # ======== Допомога ========
-@dp.callback_query_handler(lambda c: c.data=='help', state=AppStates.MAIN_MENU)
+@dp.callback_query_handler(lambda c: c.data=='help', state="*") # Змінено state на "*"
 async def help_handler(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} requested help.")
     await call.answer()
@@ -614,7 +614,7 @@ async def help_handler(call: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(state="*")
 async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
     logging.info(f"DEBUG: Unhandled callback_data received: {call.data} from user {call.from_user.id} in state {await state.get_state()}")
-    await call.answer() # Важливо відповісти на callback_query, щоб уникнути "крутячогося годинника"
+    await call.answer()
 
 # ======== Глобальний хендлер помилок ========
 @dp.errors_handler()
@@ -678,7 +678,7 @@ async def on_startup(dp_obj):
         logging.warning(f"Не вдалося видалити попередній вебхук (можливо, його не було): {e}")
     
     # Додаємо невелику паузу
-    await asyncio.sleep(1) # Пауза в 1 секунду
+    await asyncio.sleep(1)
 
     # Встановлюємо новий вебхук, скидаючи всі очікуючі оновлення
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
