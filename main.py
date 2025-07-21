@@ -1,3 +1,4 @@
+# main.py
 import os
 import asyncio
 import logging
@@ -248,6 +249,8 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
 @dp.message_handler(commands=['start'], state="*")
 async def on_start(msg: types.Message, state: FSMContext):
     logging.info(f"User {msg.from_user.id} started bot.")
+    # ДОДАНО: Лог, щоб перевірити, чи спрацьовує цей обробник
+    logging.info(f"DEBUG: on_start handler triggered for user {msg.from_user.id}")
     
     try:
         # Видаляємо команду /start, якщо вона була відправлена
