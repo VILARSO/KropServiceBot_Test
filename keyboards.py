@@ -33,9 +33,9 @@ def categories_kb(is_post_creation=True):
     :param is_post_creation: Якщо True, callback_data буде 'post_cat_X', інакше 'view_cat_X'.
     """
     kb = InlineKeyboardMarkup(row_width=2)
-    for i, (emoji, cat_name) in enumerate(CATEGORIES):
+    for i, (full_name_with_emoji, _) in enumerate(CATEGORIES): # ВИПРАВЛЕНО: Використовуємо full_name_with_emoji
         prefix = "post_cat" if is_post_creation else "view_cat"
-        kb.add(InlineKeyboardButton(f"{emoji} {cat_name}", callback_data=f"{prefix}_{i}"))
+        kb.add(InlineKeyboardButton(full_name_with_emoji, callback_data=f"{prefix}_{i}")) # ВИПРАВЛЕНО: Використовуємо повну назву для тексту кнопки
     # Кнопка "Назад до головного меню" внизу
     kb.add(InlineKeyboardButton("⬅️ Назад", callback_data="go_back_to_main_menu"))
     return kb
