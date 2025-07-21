@@ -8,12 +8,13 @@ from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
-from aiogram.types import CallbackQuery, Message # ДОДАНО: Імпорт CallbackQuery та Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotModified, MessageToDeleteNotFound
 
 import motor.motor_asyncio
 from motor.core import AgnosticClient, AgnosticDatabase
+from motor.pymongo import DESCENDING, ASCENDING # ДОДАНО: Імпорт DESCENDING та ASCENDING
 
 # Імпорт модулів бота
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
@@ -47,11 +48,11 @@ async def init_db_connection():
         logging.info(f"Створено TTL індекс на 'created_at' для колекції 'posts' з терміном дії {POST_LIFETIME_DAYS} днів.")
 
         # Складений індекс для перегляду публічних оголошень
-        await db.posts.create_index([("category", 1), ("created_at", -1)])
+        await db.posts.create_index([("category", 1), ("created_at", DESCENDING)]) # Використовуємо DESCENDING
         logging.info("Створено складений індекс на '(category, created_at)' для колекції 'posts'.")
 
         # Складений індекс для перегляду 'Моїх оголошень'
-        await db.posts.create_index([("user_id", 1), ("created_at", -1)])
+        await db.posts.create_index([("user_id", 1), ("created_at", DESCENDING)]) # Використовуємо DESCENDING
         logging.info("Створено складений індекс на '(user_id, created_at)' для колекції 'posts'.")
 
         # Унікальний індекс для користувацького ID оголошення
@@ -97,7 +98,7 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
         # Отримуємо оголошення з MongoDB з сортуванням та пагінацією
         posts_cursor = db.posts.find(
             {'category': cat}
-        ).sort([('created_at', motor.motor_asyncio.DESCENDING)]).skip(offset).limit(VIEW_POSTS_PER_PAGE)
+        ).sort([('created_at', DESCENDING)]).skip(offset).limit(VIEW_POSTS_PER_PAGE) # Використовуємо DESCENDING
         
         page_posts = await posts_cursor.to_list(length=VIEW_POSTS_PER_PAGE) # Асинхронний виклик
 
@@ -182,7 +183,7 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
         # Отримуємо оголошення користувача з MongoDB, сортуємо за датою та пагінуємо
         user_posts_cursor = db.posts.find(
             {'user_id': chat_id}
-        ).sort([('created_at', motor.motor_asyncio.DESCENDING)]).skip(offset).limit(MY_POSTS_PER_PAGE)
+        ).sort([('created_at', DESCENDING)]).skip(offset).limit(MY_POSTS_PER_PAGE) # Використовуємо DESCENDING
         
         page_posts = await user_posts_cursor.to_list(length=MY_POSTS_PER_PAGE) # Асинхронний виклик
         
@@ -417,7 +418,7 @@ async def add_cont(msg: types.Message, state: FSMContext):
         f"🔎 \\*Перевірте:\\*\n"
         f"{escape_markdown_v2(type_emoji)} **{escape_markdown_v2(data['type'].capitalize())}** \\| **{escape_markdown_v2(data['category'])}**\n"
         f"🔹 {escape_markdown_v2(data['desc'])}\n"
-        f"📞 {escape_markdown_v2(data['cont'])}"
+        f"� {escape_markdown_v2(data['cont'])}"
     )
     kb = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("✅ Підтвердити", callback_data="confirm_add_post"),
@@ -716,3 +717,4 @@ if __name__ == '__main__':
         host=WEBAPP_HOST,
         port=WEBAPP_PORT,
     )
+�
