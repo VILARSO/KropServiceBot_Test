@@ -663,8 +663,19 @@ async def on_startup(dp_obj):
     await init_db_connection()
 
     WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-    # Видаляємо старий webhook і встановлюємо новий, скидаючи всі очікуючі оновлення
-    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True) # Змінено тут
+    
+    # Явно видаляємо вебхук перед встановленням нового
+    try:
+        await bot.delete_webhook()
+        logging.info("Попередній вебхук успішно видалено.")
+    except TelegramAPIError as e:
+        logging.warning(f"Не вдалося видалити попередній вебхук (можливо, його не було): {e}")
+    
+    # Додаємо невелику паузу
+    await asyncio.sleep(1) # Пауза в 1 секунду
+
+    # Встановлюємо новий вебхук, скидаючи всі очікуючі оновлення
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
     logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
 
     # Перевірка статусу вебхука після встановлення
