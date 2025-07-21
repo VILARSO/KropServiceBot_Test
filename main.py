@@ -463,7 +463,7 @@ async def view_cat(call: CallbackQuery, state: FSMContext):
     
     await state.update_data(current_view_category=cat_name, current_category_idx=idx)
     await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0)
-    await state.set_state(AppStates.VIEW_LISTING) # ВИПРАВЛЕНО: Змінено стан на VIEW_LISTING
+    await state.set_state(AppStates.VIEW_LISTING)
     
 @dp.callback_query_handler(lambda c: c.data.startswith('viewpage_'), state=AppStates.VIEW_LISTING)
 async def view_paginate(call: CallbackQuery, state: FSMContext):
@@ -596,7 +596,7 @@ async def help_handler(call: CallbackQuery, state: FSMContext):
     await update_or_send_interface_message(call.message.bot, call.message.chat.id, state, "💬 Для співпраці або допомоги пишіть \\@VILARSO18", kb, parse_mode='MarkdownV2') 
     await state.set_state(AppStates.MAIN_MENU) 
 
-# ДОДАНО: Глобальний обробник для логування всіх callback_data та обробки скинутого стану
+# Глобальний обробник для логування всіх callback_data та обробки скинутого стану
 # Цей обробник має бути ПІСЛЯ всіх інших специфічних callback_query_handler-ів
 @dp.callback_query_handler(state="*")
 async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
@@ -606,7 +606,6 @@ async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
     # Перевіряємо, чи стан користувача None (сесія скинута)
     if current_state is None:
         # Перевіряємо, чи callback_data схожа на ту, що очікується в певних станах
-        # Це можуть бути кнопки, які не є кнопками головного меню (які вже state="*")
         sub_menu_callbacks = [
             'type_', 'post_cat_', 'view_cat_', 'viewpage_', 'mypage_',
             'edit_', 'delete_', 'skip_cont', 'confirm_add_post', 'cancel_add_post', 'confirm_delete_', 'cancel_delete_'
@@ -615,6 +614,15 @@ async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
         is_sub_menu_callback = any(call.data.startswith(prefix) for prefix in sub_menu_callbacks)
 
         if is_sub_menu_callback:
+            # Видаляємо попереднє повідомлення перед тим, як надіслати нове головне меню
+            try:
+                await call.message.delete()
+                logging.info(f"Deleted old message {call.message.message_id} for user {call.from_user.id} due to session reset.")
+            except MessageToDeleteNotFound:
+                logging.warning(f"Message {call.message.message_id} not found to delete for user {call.from_user.id}.")
+            except Exception as e:
+                logging.error(f"Error deleting message {call.message.message_id} for user {call.from_user.id}: {e}", exc_info=True)
+
             await call.answer("Ваша сесія була скинута. Будь ласка, почніть з головного меню.", show_alert=True)
             await go_to_main_menu(call.message.bot, call.message.chat.id, state)
             return # Важливо повернутися після обробки
