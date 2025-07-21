@@ -33,9 +33,9 @@ def categories_kb(is_post_creation=True):
     :param is_post_creation: Якщо True, callback_data буде 'post_cat_X', інакше 'view_cat_X'.
     """
     kb = InlineKeyboardMarkup(row_width=2)
-    for i, (full_name_with_emoji, _) in enumerate(CATEGORIES): # ВИПРАВЛЕНО: Використовуємо full_name_with_emoji
+    for i, (full_name_with_emoji, _) in enumerate(CATEGORIES):
         prefix = "post_cat" if is_post_creation else "view_cat"
-        kb.add(InlineKeyboardButton(full_name_with_emoji, callback_data=f"{prefix}_{i}")) # ВИПРАВЛЕНО: Використовуємо повну назву для тексту кнопки
+        kb.add(InlineKeyboardButton(full_name_with_emoji, callback_data=f"{prefix}_{i}"))
     # Кнопка "Назад до головного меню" внизу
     kb.add(InlineKeyboardButton("⬅️ Назад", callback_data="go_back_to_main_menu"))
     return kb
@@ -79,22 +79,21 @@ def pagination_kb(total_posts: int, current_offset: int, posts_per_page: int, ac
     has_prev = current_offset > 0
     has_next = (current_offset + posts_per_page) < total_posts
 
-    # Створюємо callback_data, що відповідає обробникам у main.py
-    if has_prev:
-        buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f'{action_prefix}_{current_offset - posts_per_page}'))
-    else:
-        buttons.append(InlineKeyboardButton(" ", callback_data='ignore')) # Пуста кнопка для вирівнювання
-
     current_page_num = (current_offset // posts_per_page) + 1
     total_pages = (total_posts + posts_per_page - 1) // posts_per_page
+    
+    # Кнопки пагінації відображаються лише за наявності попередньої/наступної сторінки
+    if has_prev:
+        buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f'{action_prefix}_{current_offset - posts_per_page}'))
+    
     buttons.append(InlineKeyboardButton(f"Сторінка {current_page_num}/{total_pages}", callback_data='ignore'))
 
     if has_next:
         buttons.append(InlineKeyboardButton("Вперед ➡️", callback_data=f'{action_prefix}_{current_offset + posts_per_page}'))
-    else:
-        buttons.append(InlineKeyboardButton(" ", callback_data='ignore')) # Пуста кнопка для вирівнювання
+    
+    if buttons: # Додаємо рядок з кнопками пагінації, тільки якщо вони існують
+        kb.row(*buttons)
 
-    kb.add(*buttons)
     if action_prefix == 'mypage': # Для моїх оголошень
         kb.add(InlineKeyboardButton("⬅️ Назад до головного меню", callback_data='go_back_to_main_menu'))
     else: # Для перегляду оголошень
