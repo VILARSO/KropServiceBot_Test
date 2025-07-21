@@ -128,7 +128,7 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
             
             post_block = (f"ID: {escape_markdown_v2(p['id'])}\n"
                          f"{escape_markdown_v2(type_emoji)} **{escape_markdown_v2(p['type'].capitalize())}**\n"
-                         f"🔹 {escape_markdown_v2(p['description'])}\n") 
+                         f"� {escape_markdown_v2(p['description'])}\n") 
             
             if p['username']:
                 if p['username'].isdigit():
@@ -609,6 +609,12 @@ async def help_handler(call: CallbackQuery, state: FSMContext):
     kb.add(InlineKeyboardButton("⬅️ Назад", callback_data="go_back_to_main_menu"))
     await update_or_send_interface_message(call.message.bot, call.message.chat.id, state, "💬 Для співпраці або допомоги пишіть \\@VILARSO18", kb, parse_mode='MarkdownV2') 
     await state.set_state(AppStates.MAIN_MENU) 
+
+# ДОДАНО: Глобальний обробник для логування всіх callback_data
+@dp.callback_query_handler(state="*")
+async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
+    logging.info(f"DEBUG: Unhandled callback_data received: {call.data} from user {call.from_user.id} in state {await state.get_state()}")
+    await call.answer() # Важливо відповісти на callback_query, щоб уникнути "крутячогося годинника"
 
 # ======== Глобальний хендлер помилок ========
 @dp.errors_handler()
