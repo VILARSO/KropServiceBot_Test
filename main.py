@@ -700,6 +700,9 @@ async def on_startup(dp_obj):
     await asyncio.sleep(1)
     await bot.set_webhook(f"{WEBHOOK_HOST}{WEBHOOK_PATH}", drop_pending_updates=True)
 
+    # Запускаємо aiohttp сервер для "/" через event loop
+    asyncio.get_event_loop().create_task(run_healthcheck_server())
+
     # Додаємо обробку для root URL "/"
     dp_obj._loop.create_task(run_healthcheck_server())
     
