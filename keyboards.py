@@ -40,18 +40,6 @@ def categories_kb(is_post_creation=True):
     kb.add(InlineKeyboardButton("⬅️ Назад", callback_data="go_back_to_main_menu"))
     return kb
 
-def search_type_kb() -> InlineKeyboardMarkup:
-    """
-    Клавіатура для вибору типу оголошення:
-    🔨 Робота або 🔧 Послуга
-    """
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("🔨 Робота", callback_data="search_type:job"),
-        InlineKeyboardButton("🔧 Послуга", callback_data="search_type:service"),
-    )
-    return kb
-
 def confirm_add_post_kb():
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
