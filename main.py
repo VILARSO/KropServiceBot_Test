@@ -14,6 +14,7 @@ from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotMod
 import motor.motor_asyncio
 from motor.core import AgnosticClient, AgnosticDatabase
 from pymongo import DESCENDING # Імпортуємо DESCENDING, якщо використовується напряму
+import pymongo.errors # Імпортуємо для обробки помилок індексів
 
 # Імпорт модулів бота
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
@@ -46,9 +47,15 @@ async def init_db_connection():
         logging.info(f"Створено TTL індекс на 'created_at' для колекції 'posts' з терміном дії {POST_LIFETIME_DAYS} днів.")
 
         # Складений індекс для перегляду публічних оголошень
-        # Цей індекс є безпечним і не повинен викликати конфліктів, навіть якщо попередній був лише на (category, created_at)
-        await db.posts.create_index([("category", 1), ("type", 1), ("created_at", DESCENDING)], name="category_type_created_at_desc_idx")
-        logging.info("Створено складений індекс на '(category, type, created_at)' для колекції 'posts'.")
+        # Додаємо обробку помилки, якщо індекс вже існує з іншим ім'ям
+        try:
+            await db.posts.create_index([("category", 1), ("type", 1), ("created_at", DESCENDING)], name="category_type_created_at_desc_idx")
+            logging.info("Створено складений індекс на '(category, type, created_at)' для колекції 'posts'.")
+        except pymongo.errors.OperationFailure as e:
+            if e.code == 85: # IndexOptionsConflict
+                logging.warning(f"Індекс 'category_type_created_at_desc_idx' вже існує або конфліктує: {e.errmsg}. Продовжуємо.")
+            else:
+                raise # Перевикидаємо інші помилки OperationFailure
 
         # Складений індекс для перегляду 'Моїх оголошень'
         await db.posts.create_index([("user_id", 1), ("created_at", DESCENDING)])
