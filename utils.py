@@ -16,7 +16,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 # ----------- Налаштування MongoDB -----------
 MONGO_URI = os.getenv("MONGO_URI")            # має бути задано в середовищі
-DB_NAME   = os.getenv("DB_NAME", "kropbot")   # за замовчуванням "kropbot"
+DB_NAME   = os.getenv("DB_NAME", "cropservice_db")   # за замовчуванням "kropbot"
 client    = AsyncIOMotorClient(MONGO_URI)
 db        = client[DB_NAME]
 posts_collection = db["posts"]                # ваша колекція з оголошеннями
