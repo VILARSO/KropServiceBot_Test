@@ -3,6 +3,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
+from aiohttp import web  # додай цей імпорт
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -717,8 +718,19 @@ async def on_shutdown(dp_obj):
         db_client.close()
         logging.info("Підключення до MongoDB закрито.")
 
+# --- Обробка запиту GET "/" (щоб UptimeRobot бачив, що бот живий)
+async def handle_root(request):
+    return web.json_response({"status": "OK", "service": "CropServiceBot"})
+
+# --- Створення aiohttp додатку з маршрутом "/"
+async def create_app():
+    app = web.Application()
+    app.router.add_get("/", handle_root)
+    return app
+
 if __name__ == '__main__':
     logging.info("Starting webhook...")
+    app = asyncio.run(create_app())
     start_webhook(
         dispatcher=dp,
         webhook_path=WEBHOOK_PATH,
@@ -726,4 +738,5 @@ if __name__ == '__main__':
         on_shutdown=on_shutdown,
         host=WEBAPP_HOST,
         port=WEBAPP_PORT,
+        web_app=app  # <-- це додає підтримку "/" на Railway
     )
