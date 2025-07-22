@@ -46,7 +46,8 @@ async def init_db_connection():
         logging.info(f"Створено TTL індекс на 'created_at' для колекції 'posts' з терміном дії {POST_LIFETIME_DAYS} днів.")
 
         # Складений індекс для перегляду публічних оголошень
-        await db.posts.create_index([("category", 1), ("type", 1), ("created_at", DESCENDING)]) # Оновлено: додано 'type' до індексу
+        # Цей індекс є безпечним і не повинен викликати конфліктів, навіть якщо попередній був лише на (category, created_at)
+        await db.posts.create_index([("category", 1), ("type", 1), ("created_at", DESCENDING)], name="category_type_created_at_desc_idx")
         logging.info("Створено складений індекс на '(category, type, created_at)' для колекції 'posts'.")
 
         # Складений індекс для перегляду 'Моїх оголошень'
