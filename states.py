@@ -8,7 +8,6 @@ class AppStates(StatesGroup):
     ADD_DESC = State()
     ADD_CONT = State()
     ADD_CONFIRM = State()
-    VIEW_TYPE = State()
     VIEW_CAT = State()
     VIEW_LISTING = State() # Цей стан тепер знову для пагінації загальних оголошень
     MY_POSTS_VIEW = State()
