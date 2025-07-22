@@ -1,65 +1,47 @@
-import os
 import re
-import logging
 from datetime import datetime, timedelta
-
 from aiogram.types import Message, CallbackQuery
 from aiogram.dispatcher import FSMContext
-from aiogram.utils.exceptions import (
-    MessageNotModified,
-    MessageToDeleteNotFound,
-    BadRequest
-)
-from aiogram import Bot  # для типізації
+from aiogram.utils.exceptions import MessageNotModified, MessageToDeleteNotFound, BadRequest
+from aiogram import Bot # Імпортуємо Bot для типізації
+import motor.motor_asyncio
 from pymongo import ReturnDocument
-from motor.motor_asyncio import AsyncIOMotorClient
+import logging # ДОДАНО: Імпорт модуля logging
 
-# ----------- Налаштування MongoDB -----------
-MONGO_URI = os.getenv("MONGO_URI")            # має бути задано в середовищі
-DB_NAME   = os.getenv("DB_NAME", "cropservice_db")   # за замовчуванням "kropbot"
-client    = AsyncIOMotorClient(MONGO_URI)
-db        = client[DB_NAME]
-posts_collection = db["posts"]                # ваша колекція з оголошеннями
-# ---------------------------------------------
-
-# Регулярний вираз для перевірки номера телефону (+380XXXXXXXXX або без +)
+# Регулярний вираз для перевірки номера телефону (приклад: +380XXXXXXXXX)
+# Це вже використовується в main.py, але залишено тут як приклад, якщо потрібно буде знову
 phone_pattern = re.compile(r'^\+?\d{10,15}$')
-
 
 def escape_markdown_v2(text: str) -> str:
     """
-    Екранує спеціальні символи MarkdownV2 в тексті.
+    Екранує спеціальні символи MarkdownV2 в тексті,
+    які не повинні інтерпретуватися як форматування.
     """
     if not isinstance(text, str):
-        text = str(text)
-
-    special_chars = r'_*[]()~`>#+-=|{}.!'
+        text = str(text) 
+    
+    # Список всіх спеціальних символів MarkdownV2, які потребують екранування
+    # https://core.telegram.org/bots/api#markdownv2-style
+    special_chars = r'_*[]()~`>#+-=|{}.!' 
+    
+    # Використовуємо re.sub для більш ефективного екранування
     return re.sub(f'([{re.escape(special_chars)}])', r'\\\1', text)
 
-
-async def update_or_send_interface_message(
-    bot_obj: Bot,
-    chat_id: int,
-    state: FSMContext,
-    text: str,
-    reply_markup=None,
-    parse_mode='HTML',
-    disable_web_page_preview: bool = False
-):
+async def update_or_send_interface_message(bot_obj: Bot, chat_id: int, state: FSMContext, text: str, reply_markup=None, parse_mode='HTML', disable_web_page_preview: bool = False):
     """
-    Редагує останнє повідомлення бота або надсилає нове.
-    Зберігає ID останнього повідомлення для подальшого редагування.
+    Редагує останнє повідомлення бота, якщо можливо, або надсилає нове.
+    Зберігає ID останнього повідомлення бота для подальшого редагування.
     """
     data = await state.get_data()
     last_bot_message_id = data.get('last_bot_message_id')
-
-    logging.info(
-        f"[update_interface] User={chat_id} LastMsgID={last_bot_message_id}"
-    )
+    
+    # Логування для налагодження
+    logging.info(f"Attempting to update/send message for user {chat_id}. Last message ID: {last_bot_message_id}")
 
     try:
         if last_bot_message_id:
-            message = await bot_obj.edit_message_text(
+            # Спроба редагувати існуюче повідомлення
+            message = await bot_obj.edit_message_text( # Використовуємо переданий bot_obj
                 chat_id=chat_id,
                 message_id=last_bot_message_id,
                 text=text,
@@ -67,22 +49,26 @@ async def update_or_send_interface_message(
                 parse_mode=parse_mode,
                 disable_web_page_preview=disable_web_page_preview
             )
+            # logging.info(f"Updated interface message for user {chat_id}. Message ID: {message.message_id}")
         else:
-            message = await bot_obj.send_message(
+            # Якщо немає останнього ID, або сталася помилка редагування, надсилаємо нове повідомлення
+            message = await bot_obj.send_message( # Використовуємо переданий bot_obj
                 chat_id=chat_id,
                 text=text,
                 reply_markup=reply_markup,
                 parse_mode=parse_mode,
                 disable_web_page_preview=disable_web_page_preview
             )
-
+            # logging.info(f"Sent new interface message for user {chat_id}. Message ID: {message.message_id}")
+        
         await state.update_data(last_bot_message_id=message.message_id)
 
     except MessageNotModified:
-        logging.info(f"MessageNotModified for user {chat_id}, skipping edit.")
+        logging.info(f"Message for user {chat_id} was not modified. Skipping update.")
+        pass # Нічого не робимо, якщо повідомлення не змінилося
     except MessageToDeleteNotFound:
-        logging.warning(f"MessageToDeleteNotFound for user {chat_id}, sending new.")
-        message = await bot_obj.send_message(
+        logging.warning(f"Message to delete not found for user {chat_id}. Sending new message.")
+        message = await bot_obj.send_message( # Використовуємо переданий bot_obj
             chat_id=chat_id,
             text=text,
             reply_markup=reply_markup,
@@ -91,8 +77,9 @@ async def update_or_send_interface_message(
         )
         await state.update_data(last_bot_message_id=message.message_id)
     except BadRequest as e:
-        logging.error(f"BadRequest editing msg for user {chat_id}: {e}")
-        message = await bot_obj.send_message(
+        # Обробка інших BadRequest помилок, наприклад, "Message can't be edited"
+        logging.error(f"BadRequest when updating message for user {chat_id}: {e}")
+        message = await bot_obj.send_message( # Використовуємо переданий bot_obj
             chat_id=chat_id,
             text=text,
             reply_markup=reply_markup,
@@ -101,11 +88,9 @@ async def update_or_send_interface_message(
         )
         await state.update_data(last_bot_message_id=message.message_id)
     except Exception as e:
-        logging.critical(
-            f"Unexpected error in update_interface for user {chat_id}: {e}",
-            exc_info=True
-        )
-        message = await bot_obj.send_message(
+        logging.critical(f"Unexpected error in update_or_send_interface_message for user {chat_id}: {e}", exc_info=True)
+        # У випадку будь-якої іншої непередбаченої помилки, спробуйте надіслати нове повідомлення як останній варіант
+        message = await bot_obj.send_message( # Використовуємо переданий bot_obj
             chat_id=chat_id,
             text=text,
             reply_markup=reply_markup,
@@ -113,20 +98,19 @@ async def update_or_send_interface_message(
             disable_web_page_preview=disable_web_page_preview
         )
         await state.update_data(last_bot_message_id=message.message_id)
-
+        # logging.info(f"Sent new interface message (after unexpected error) for user {chat_id}. Message ID: {new_msg.message_id}")
 
 def can_edit(post: dict) -> bool:
-    """
-    Перевіряє, чи можна редагувати оголошення
-    (15 хв після created_at).
-    """
+    """Перевіряє, чи можна редагувати оголошення (протягом 15 хвилин після створення)."""
+    # MongoDB зберігає datetime об'єкти, тому прямо порівнюємо
     return datetime.utcnow() - post['created_at'] < timedelta(minutes=15)
-
 
 async def get_next_sequence_value(db_obj, sequence_name: str) -> int:
     """
-    Генерує послідовний ID через MongoDB лічильник.
+    Генерує послідовний цілочисловий ID за допомогою MongoDB-лічильника.
+    Приймає об'єкт db (motor.core.AgnosticDatabase) як перший аргумент.
     """
+    # Збільшуємо лічильник і повертаємо нове значення
     result = await db_obj.counters.find_one_and_update(
         {'_id': sequence_name},
         {'$inc': {'sequence_value': 1}},
@@ -134,34 +118,3 @@ async def get_next_sequence_value(db_obj, sequence_name: str) -> int:
         return_document=ReturnDocument.AFTER
     )
     return result['sequence_value']
-
-
-async def get_posts(
-    filter_dict: dict,
-    limit: int = 5,
-    last_created_at=None
-) -> list:
-    """
-    Повертає список оголошень з фільтрацією:
-      • filter_dict['type']     : "job" або "service"
-      • filter_dict['category'] : категорія з CATEGORIES
-      • last_created_at         : для пагінації (ISODate)
-    """
-    query = {}
-
-    # 1) Фільтруємо за типом
-    if filter_dict.get('type'):
-        query['type'] = filter_dict['type']
-
-    # 2) Фільтруємо за категорією
-    if filter_dict.get('category'):
-        query['category'] = filter_dict['category']
-
-    # 3) Пагінація за датою
-    if last_created_at:
-        query['created_at'] = {'$lt': last_created_at}
-
-    cursor = posts_collection.find(query) \
-                              .sort("created_at", -1) \
-                              .limit(limit)
-    return await cursor.to_list(length=limit)
