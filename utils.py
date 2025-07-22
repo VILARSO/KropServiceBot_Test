@@ -118,3 +118,28 @@ async def get_next_sequence_value(db_obj, sequence_name: str) -> int:
         return_document=ReturnDocument.AFTER
     )
     return result['sequence_value']
+
+async def get_posts(filter_dict: dict, limit: int = 5, last_created_at=None):
+    """
+    Повертає list з ваших оголошень з урахуванням фільтрації за:
+      - filter_dict['type']     : "job" або "service"
+      - filter_dict['category'] : зі списку CATEGORIES
+      - last_created_at         : для пагінації (постів старіших за цей час)
+    """
+    query = {}
+    # 1) фільтр за типом (робота/послуга)
+    if filter_dict.get('type'):
+        query['type'] = filter_dict['type']
+
+    # 2) фільтр за категорією
+    if filter_dict.get('category'):
+        query['category'] = filter_dict['category']
+
+    # 3) пагінація (якщо потрібно)
+    if last_created_at:
+        query['created_at'] = {'$lt': last_created_at}
+
+    cursor = posts_collection.find(query) \
+                              .sort("created_at", -1) \
+                              .limit(limit)
+    return await cursor.to_list(length=limit)
