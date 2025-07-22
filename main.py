@@ -13,15 +13,12 @@ from aiogram.utils.exceptions import BadRequest, TelegramAPIError, MessageNotMod
 
 import motor.motor_asyncio
 from motor.core import AgnosticClient, AgnosticDatabase
-from pymongo import DESCENDING, ASCENDING, ReturnDocument
+from pymongo import DESCENDING # Імпортуємо DESCENDING, якщо використовується напряму
 
 # Імпорт модулів бота
 from config import API_TOKEN, MONGO_DB_URL, WEBHOOK_HOST, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT, POST_LIFETIME_DAYS, MY_POSTS_PER_PAGE, VIEW_POSTS_PER_PAGE, CATEGORIES, TYPE_EMOJIS
 from states import AppStates
-from keyboards import main_kb, categories_kb, confirm_add_post_kb, post_actions_kb, edit_post_kb, pagination_kb, confirm_delete_kb, back_kb, type_kb, contact_kb
-
-# Імпортуємо update_or_send_interface_message, can_edit, get_next_sequence_value з utils
-from utils import escape_markdown_v2, update_or_send_interface_message, can_edit, get_next_sequence_value
+from keyboards import main_kb, categories_kb, confirm_add_post_kb, post_actions_kb, edit_post_kb, pagination_kb, confirm_delete_kb, back_kb, type_kb, contact_kb, view_types_kb # Імпортуємо view_types_kb
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -49,8 +46,8 @@ async def init_db_connection():
         logging.info(f"Створено TTL індекс на 'created_at' для колекції 'posts' з терміном дії {POST_LIFETIME_DAYS} днів.")
 
         # Складений індекс для перегляду публічних оголошень
-        await db.posts.create_index([("category", 1), ("created_at", DESCENDING)])
-        logging.info("Створено складений індекс на '(category, created_at)' для колекції 'posts'.")
+        await db.posts.create_index([("category", 1), ("type", 1), ("created_at", DESCENDING)]) # Оновлено: додано 'type' до індексу
+        logging.info("Створено складений індекс на '(category, type, created_at)' для колекції 'posts'.")
 
         # Складений індекс для перегляду 'Моїх оголошень'
         await db.posts.create_index([("user_id", 1), ("created_at", DESCENDING)])
@@ -89,28 +86,29 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
     try:
         data = await state.get_data()
         cat = data.get('current_view_category')
+        post_type = data.get('current_view_type') # Отримуємо тип з стану
 
-        if not cat:
-            logging.error(f"Category not found in state for user {chat_id}")
+        if not cat or not post_type: # Перевіряємо обидва параметри
+            logging.error(f"Category or Type not found in state for user {chat_id}. Cat: {cat}, Type: {post_type}")
             return await go_to_main_menu(bot_obj, chat_id, state)
 
-        # Отримуємо загальну кількість оголошень для пагінації
-        total_posts = await db.posts.count_documents({'category': cat})
+        # Формуємо запит до БД з фільтрацією за категорією ТА типом
+        query_filter = {'category': cat, 'type': post_type}
+        total_posts = await db.posts.count_documents(query_filter)
         
-        # Отримуємо оголошення з MongoDB з сортуванням та пагінацією
         posts_cursor = db.posts.find(
-            {'category': cat}
+            query_filter
         ).sort([('created_at', DESCENDING)]).skip(offset).limit(VIEW_POSTS_PER_PAGE)
         
         page_posts = await posts_cursor.to_list(length=VIEW_POSTS_PER_PAGE)
 
-        if not page_posts: 
-            logging.info(f"No posts found for category '{cat}' for user {chat_id}")
+        if not page_posts:
+            logging.info(f"No posts found for category '{cat}' and type '{post_type}' for user {chat_id}")
             kb = InlineKeyboardMarkup(row_width=1).add(
-                InlineKeyboardButton("⬅️ Назад до категорій", callback_data="go_back_to_prev_step"),
+                InlineKeyboardButton("⬅️ Назад до категорій", callback_data="go_back_to_prev_step"), # Повертає до вибору категорії
                 InlineKeyboardButton("🏠 Головне меню", callback_data="go_back_to_main_menu")
             )
-            text_to_send = f"У категорії «{escape_markdown_v2(cat)}» поки що немає оголошень\\."
+            text_to_send = f"У категорії «{escape_markdown_v2(cat)}» та типі «{escape_markdown_v2(post_type)}» поки що немає оголошень\\."
             return await update_or_send_interface_message(
                 bot_obj, chat_id, state,
                 text_to_send,
@@ -122,10 +120,11 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, of
         total_pages = (total_posts + VIEW_POSTS_PER_PAGE - 1) // VIEW_POSTS_PER_PAGE
         current_page = offset // VIEW_POSTS_PER_PAGE + 1
         
-        full_text = (f"📋 **{escape_markdown_v2(cat)}** \\(Сторінка {escape_markdown_v2(current_page)}/{escape_markdown_v2(total_pages)}\\)\n\n")
+        full_text = (f"📋 **{escape_markdown_v2(cat)}** \\({escape_markdown_v2(post_type.capitalize())}\\) \\(Сторінка {escape_markdown_v2(current_page)}/{escape_markdown_v2(total_pages)}\\)\n\n")
         
         # Використовуємо pagination_kb для створення кнопок пагінації
-        combined_keyboard = pagination_kb(total_posts, offset, VIEW_POSTS_PER_PAGE, 'viewpage', cat)
+        # Тепер передаємо pagination_kb також post_type
+        combined_keyboard = pagination_kb(total_posts, offset, VIEW_POSTS_PER_PAGE, 'viewpage', cat, post_type)
 
         for i, p in enumerate(page_posts):
             type_emoji = TYPE_EMOJIS.get(p['type'], '') 
@@ -178,13 +177,15 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
         page_posts = await user_posts_cursor.to_list(length=MY_POSTS_PER_PAGE)
         
         await state.update_data(offset=offset)
-
+        
         total_pages = (total_posts + MY_POSTS_PER_PAGE - 1) // MY_POSTS_PER_PAGE
         current_page = offset // MY_POSTS_PER_PAGE + 1
         
         full_text = f"🗂️ **Мої оголошення** \\(Сторінка {escape_markdown_v2(current_page)}/{escape_markdown_v2(total_pages)}\\)\n\n"
         
-        combined_keyboard = InlineKeyboardMarkup(row_width=2) 
+        # Використовуємо pagination_kb для створення кнопок пагінації
+        # Для "Моїх оголошень" тип та категорія не потрібні
+        combined_keyboard = pagination_kb(total_posts, offset, MY_POSTS_PER_PAGE, 'mypage') 
 
         for i, p in enumerate(page_posts):
             type_emoji = TYPE_EMOJIS.get(p['type'], '') 
@@ -216,13 +217,6 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
 
             if i < len(page_posts) - 1:
                 full_text += "\n—\n\n"
-
-        # Використовуємо pagination_kb для створення кнопок пагінації
-        nav_keyboard = pagination_kb(total_posts, offset, MY_POSTS_PER_PAGE, 'mypage', str(chat_id))
-        
-        # Додаємо кнопки навігації до основної клавіатури
-        for row in nav_keyboard.inline_keyboard:
-            combined_keyboard.add(*row)
             
         await update_or_send_interface_message(bot_obj, chat_id, state, full_text, combined_keyboard, parse_mode='MarkdownV2', disable_web_page_preview=True)
 
@@ -236,7 +230,6 @@ async def show_my_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offs
 @dp.message_handler(commands=['start'], state="*")
 async def on_start(msg: types.Message, state: FSMContext):
     logging.info(f"User {msg.from_user.id} started bot.")
-    logging.info(f"DEBUG: on_start handler triggered for user {msg.from_user.id}")
     
     try:
         await msg.delete() 
@@ -278,9 +271,13 @@ async def on_back_to_prev_step(call: CallbackQuery, state: FSMContext):
     elif current_state == AppStates.ADD_CONFIRM.state:
         await update_or_send_interface_message(bot_obj, chat_id, state, "📞 Введіть контакт (необов’язково):", contact_kb())
         await state.set_state(AppStates.ADD_CONT)
-    elif current_state == AppStates.VIEW_CAT.state:
+    elif current_state == AppStates.VIEW_TYPE.state: # NEW: Back from type selection in view
         await go_to_main_menu(bot_obj, chat_id, state)
+    elif current_state == AppStates.VIEW_CAT.state: # NEW: Back from category selection in view
+        await update_or_send_interface_message(bot_obj, chat_id, state, "🔎 Оберіть тип оголошення для перегляду:", view_types_kb())
+        await state.set_state(AppStates.VIEW_TYPE)
     elif current_state == AppStates.VIEW_LISTING.state:
+        # Якщо ми в списку оголошень, "Назад" має повернути до вибору категорії
         await update_or_send_interface_message(bot_obj, chat_id, state, "🔎 Оберіть категорію:", categories_kb(is_post_creation=False))
         await state.set_state(AppStates.VIEW_CAT)
     elif current_state == AppStates.MY_POSTS_VIEW.state:
@@ -293,7 +290,7 @@ async def on_back_to_prev_step(call: CallbackQuery, state: FSMContext):
         await go_to_main_menu(bot_obj, chat_id, state)
 
 # ======== Додавання оголошень ========
-@dp.callback_query_handler(lambda c: c.data == 'add_post', state="*")
+@dp.callback_query_handler(lambda c: c.data == 'add_post', state=[AppStates.MAIN_MENU, AppStates.MY_POSTS_VIEW])
 async def add_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'Add Post'.")
     await call.answer()
@@ -312,7 +309,7 @@ async def add_type(call: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data.startswith('post_cat_'), state=AppStates.ADD_CAT)
 async def add_cat(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split('_')[2])
-    _, cat = CATEGORIES[idx]
+    cat = CATEGORIES[idx] # Отримуємо назву категорії за індексом
     logging.info(f"User {call.from_user.id} selected category: {cat}.")
     await call.answer()
     await state.update_data(category=cat)
@@ -322,17 +319,17 @@ async def add_cat(call: CallbackQuery, state: FSMContext):
 @dp.message_handler(state=AppStates.ADD_DESC)
 async def add_desc(msg: types.Message, state: FSMContext):
     logging.info(f"User {msg.from_user.id} entered description.")
-    text = msg.text.strip()
     
     try:
         await msg.delete()
     except MessageToDeleteNotFound:
         pass
 
+    text = msg.text.strip()
     if not text:
         return await update_or_send_interface_message(msg.bot, msg.chat.id, state, "❌ Опис не може бути порожнім\\. Введіть опис (до 500 символів):", back_kb(), parse_mode='MarkdownV2')
     if len(text) > 500:
-        return await update_or_send_interface_message(msg.bot, msg.chat.id, state, f"❌ Занадто довгий \\({len(text)}/500\\)\\.", back_kb(), parse_mode='MarkdownV2')
+        return await update_or_send_interface_message(msg.bot, msg.chat.id, state, f"❌ Занадто довгий \\({len(text)}/500\\)\\. Введіть опис (до 500 символів):", back_kb(), parse_mode='MarkdownV2')
     
     await state.update_data(desc=text)
     await update_or_send_interface_message(msg.bot, msg.chat.id, state, "📞 Введіть контакт (необов’язково):", contact_kb())
@@ -345,7 +342,7 @@ async def skip_cont(call: CallbackQuery, state: FSMContext):
     await state.update_data(cont="")
     data = await state.get_data()
     
-    type_emoji = TYPE_EMOJIS.get(data['type'], '')
+    type_emoji = TYPE_EMOJIS.get(data['type'], '') 
     
     summary = (
         f"🔎 \\*Перевірте:\\*\n"
@@ -363,13 +360,13 @@ async def skip_cont(call: CallbackQuery, state: FSMContext):
 @dp.message_handler(state=AppStates.ADD_CONT)
 async def add_cont(msg: types.Message, state: FSMContext):
     logging.info(f"User {msg.from_user.id} entered contact info.")
-    text = msg.text.strip()
     
     try:
         await msg.delete()
     except MessageToDeleteNotFound:
         pass
 
+    text = msg.text.strip()
     if not text:
         return await update_or_send_interface_message(msg.bot, msg.chat.id, state, "❌ Контакт не може бути порожнім\\. Введіть номер телефону або пропустіть\\.", contact_kb(), parse_mode='MarkdownV2')
     
@@ -452,25 +449,52 @@ async def add_confirm(call: CallbackQuery, state: FSMContext):
 async def view_start(call: CallbackQuery, state: FSMContext):
     logging.info(f"User {call.from_user.id} initiated 'View Posts'.")
     await call.answer()
+    # Спочатку просимо обрати тип оголошення
+    await update_or_send_interface_message(call.message.bot, call.message.chat.id, state, "🔎 Оберіть тип оголошення для перегляду:", view_types_kb())
+    await state.set_state(AppStates.VIEW_TYPE)
+
+@dp.callback_query_handler(lambda c: c.data.startswith('view_type_'), state=AppStates.VIEW_TYPE)
+async def view_type_selected(call: CallbackQuery, state: FSMContext):
+    logging.info(f"User {call.from_user.id} selected view type: {call.data}.")
+    await call.answer()
+    typ = 'робота' if call.data == 'view_type_work' else 'послуга'
+    await state.update_data(current_view_type=typ) # Зберігаємо обраний тип
+    # Тепер просимо обрати категорію
     await update_or_send_interface_message(call.message.bot, call.message.chat.id, state, "🔎 Оберіть категорію:", categories_kb(is_post_creation=False))
     await state.set_state(AppStates.VIEW_CAT)
 
 @dp.callback_query_handler(lambda c: c.data.startswith('view_cat_'), state=AppStates.VIEW_CAT)
 async def view_cat(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split('_')[2])
-    cat_name = CATEGORIES[idx][1]
+    cat_name = CATEGORIES[idx] # Отримуємо назву категорії за індексом
     logging.info(f"User {call.from_user.id} selected view category: {cat_name}.")
     await call.answer()
     
-    await state.update_data(current_view_category=cat_name, current_category_idx=idx)
-    await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0)
+    data = await state.get_data()
+    post_type = data.get('current_view_type') # Отримуємо тип з стану
+
+    if not post_type:
+        logging.error(f"Type not found in state for user {call.from_user.id} when selecting category.")
+        return await go_to_main_menu(call.message.bot, call.message.chat.id, state)
+
+    await state.update_data(current_view_category=cat_name) # Зберігаємо категорію
+    await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0) # Починаємо з першої сторінки
     await state.set_state(AppStates.VIEW_LISTING)
     
 @dp.callback_query_handler(lambda c: c.data.startswith('viewpage_'), state=AppStates.VIEW_LISTING)
 async def view_paginate(call: CallbackQuery, state: FSMContext):
-    logging.info(f"User {call.from_user.id} paginating view posts to offset {call.data.split('_')[1]}.")
+    # callback_data format: viewpage_{offset}_{category}_{type}
+    parts = call.data.split('_')
+    offset = int(parts[1])
+    cat = parts[2]
+    post_type = parts[3] # Отримуємо тип з callback_data
+
+    logging.info(f"User {call.from_user.id} paginating view posts to offset {offset} for category {cat} and type {post_type}.")
     await call.answer()
-    offset = int(call.data.split('_')[1])
+    
+    # Оновлюємо стан, щоб show_view_posts_page могла їх використовувати
+    await state.update_data(current_view_category=cat, current_view_type=post_type, offset=offset)
+    
     await show_view_posts_page(call.message.bot, call.message.chat.id, state, offset)
 
 
@@ -512,13 +536,13 @@ async def edit_start(call: CallbackQuery, state: FSMContext):
 @dp.message_handler(state=AppStates.EDIT_DESC)
 async def process_edit(msg: types.Message, state: FSMContext):
     logging.info(f"User {msg.from_user.id} submitting new description for edit.")
-    text = msg.text.strip()
     
     try:
         await msg.delete()
     except MessageToDeleteNotFound:
         pass
 
+    text = msg.text.strip()
     if not text or len(text) > 500:
         return await update_or_send_interface_message(msg.bot, msg.chat.id, state, f"❌ Неприпустимий опис \\(1\\-500 символів\\)\\.", back_kb(), parse_mode='MarkdownV2') 
         
@@ -606,27 +630,18 @@ async def debug_all_callbacks(call: CallbackQuery, state: FSMContext):
 
     # Перевіряємо, чи стан користувача None (сесія скинута)
     if current_state is None:
-        # Перевіряємо, чи callback_data схожа на ту, що очікується в певних станах
-        sub_menu_callbacks = [
-            'type_', 'post_cat_', 'view_cat_', 'viewpage_', 'mypage_',
-            'edit_', 'delete_', 'skip_cont', 'confirm_add_post', 'cancel_add_post', 'confirm_delete_', 'cancel_delete_'
-        ]
-        
-        is_sub_menu_callback = any(call.data.startswith(prefix) for prefix in sub_menu_callbacks)
+        # Видаляємо повідомлення, на яке натиснув користувач, щоб прибрати старий інтерфейс
+        try:
+            await call.message.delete()
+            logging.info(f"Deleted old message {call.message.message_id} for user {call.from_user.id} due to session reset.")
+        except MessageToDeleteNotFound:
+            logging.warning(f"Message {call.message.message_id} not found to delete for user {call.from_user.id}.")
+        except Exception as e:
+            logging.error(f"Error deleting message {call.message.message_id} for user {call.from_user.id}: {e}", exc_info=True)
 
-        if is_sub_menu_callback:
-            # Видаляємо попереднє повідомлення перед тим, як надіслати нове головне меню
-            try:
-                await call.message.delete()
-                logging.info(f"Deleted old message {call.message.message_id} for user {call.from_user.id} due to session reset.")
-            except MessageToDeleteNotFound:
-                logging.warning(f"Message {call.message.message_id} not found to delete for user {call.from_user.id}.")
-            except Exception as e:
-                logging.error(f"Error deleting message {call.message.message_id} for user {call.from_user.id}: {e}", exc_info=True)
-
-            await call.answer("Ваша сесія була скинута. Будь ласка, почніть з головного меню.", show_alert=True)
-            await go_to_main_menu(call.message.bot, call.message.chat.id, state)
-            return # Важливо повернутися після обробки
+        await call.answer("Ваша сесія була скинута. Будь ласка, почніть з головного меню.", show_alert=True)
+        await go_to_main_menu(call.message.bot, call.message.chat.id, state)
+        return # Важливо повернутися після обробки
 
     await call.answer() # Завжди відповідаємо на callback_query, щоб уникнути "крутячогося годинника"
 
@@ -672,41 +687,27 @@ async def err_handler(update: types.Update, exception):
             logging.info("Message to delete not found, skipping.")
             return True
 
-    logging.critical(f"Unhandled error: {exception}", exc_info=True)
+    logging.critical(f"Необроблена помилка: {exception}", exc_info=True)
     if chat_id and bot_obj:
         await update_or_send_interface_message(bot_obj, chat_id, dp.current_state(), "Вибачте, сталася неочікувана помилка\\. Спробуйте ще раз або зверніться до адміністратора\\.", main_kb())
         await dp.current_state().set_state(AppStates.MAIN_MENU)
     return True
 
-async def on_startup(dp_obj):
+async def on_startup(dp_obj): # Перейменовано dp на dp_obj, щоб уникнути конфлікту з глобальним dp
     logging.info("Запуск бота...")
-    await init_db_connection()
+    await init_db_connection() # Викликаємо асинхронну функцію підключення до БД
 
-    WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-    
-    # Явно видаляємо вебхук перед встановленням нового
-    try:
-        await bot.delete_webhook()
-        logging.info("Попередній вебхук успішно видалено.")
-    except TelegramAPIError as e:
-        logging.warning(f"Не вдалося видалити попередній вебхук (можливо, його не було): {e}")
-    
-    # Додаємо невелику паузу
-    await asyncio.sleep(1)
+    # 1) Видаляємо старий webhook (якщо є)
+    await bot.delete_webhook(drop_pending_updates=True)
 
-    # Встановлюємо новий вебхук, скидаючи всі очікуючі оновлення
-    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    # 2) Реєструємо новий webhook і лог
+    WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}" # Формуємо WEBHOOK_URL тут
+    await bot.set_webhook(WEBHOOK_URL)
     logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
 
-    # Перевірка статусу вебхука після встановлення
-    try:
-        webhook_info = await bot.get_webhook_info()
-        logging.info(f"DEBUG: Webhook info after setup: {webhook_info}")
-    except Exception as e:
-        logging.error(f"DEBUG: Failed to get webhook info after setup: {e}", exc_info=True)
 
-
-async def on_shutdown(dp_obj):
+async def on_shutdown(dp_obj): # Перейменовано dp на dp_obj
+    # видаляємо webhook при зупинці
     logging.info("Вимкнення бота...")
     await bot.delete_webhook()
     logging.info("Вебхук видалено.")
