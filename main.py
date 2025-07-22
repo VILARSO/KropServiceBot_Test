@@ -718,6 +718,10 @@ async def on_shutdown(dp_obj):
         db_client.close()
         logging.info("Підключення до MongoDB закрито.")
 
+# aiohttp-обробник для GET /
+async def handle_root(request):
+    return web.json_response({"status": "OK", "service": "CropServiceBot"})
+
 # --- Обробка запиту GET "/" (щоб UptimeRobot бачив, що бот живий)
 async def handle_root(request):
     return web.json_response({"status": "OK", "service": "CropServiceBot"})
@@ -731,6 +735,8 @@ async def create_app():
 if __name__ == '__main__':
     logging.info("Starting webhook...")
     app = asyncio.run(create_app())
+    app.router.add_get("/", handle_root)  # Додаємо відповідь на /
+    
     start_webhook(
         dispatcher=dp,
         webhook_path=WEBHOOK_PATH,
