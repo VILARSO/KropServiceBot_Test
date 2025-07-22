@@ -718,37 +718,32 @@ async def on_shutdown(dp_obj):
         db_client.close()
         logging.info("Підключення до MongoDB закрито.")
 
-# aiohttp-обробник для GET /
+# Обробник для GET /
 async def handle_root(request):
     return web.json_response({"status": "OK", "service": "CropServiceBot"})
 
-# --- Обробка запиту GET "/" (щоб UptimeRobot бачив, що бот живий)
-async def handle_root(request):
-    return web.json_response({"status": "OK", "service": "CropServiceBot"})
-
-# --- Створення aiohttp додатку з маршрутом "/"
-async def create_app():
+async def run_aiohttp_server():
     app = web.Application()
     app.router.add_get("/", handle_root)
-    return app
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, WEBAPP_HOST, WEBAPP_PORT)
+    await site.start()
+    logging.info("✅ Aiohttp-сервер запущено на /")
+
+async def main():
+    await on_startup(dp)
+    await asyncio.gather(
+        run_aiohttp_server(),  # окрема aiohttp відповідь на /
+        start_webhook(         # бот працює як завжди
+            dispatcher=dp,
+            webhook_path=WEBHOOK_PATH,
+            on_startup=on_startup,
+            on_shutdown=on_shutdown,
+            host=WEBAPP_HOST,
+            port=WEBAPP_PORT
+        )
+    )
 
 if __name__ == '__main__':
-    logging.info("Starting webhook...")
-
-    # Створюємо aiohttp-додаток
-    app = web.Application()
-
-    # Безпечно додаємо маршрут "/", якщо його ще немає
-    if not any(r for r in app.router.routes() if r.method == 'GET' and str(r.resource) == '/'):
-        app.router.add_get("/", handle_root)
-
-    # Запускаємо бота
-    start_webhook(
-        dispatcher=dp,
-        webhook_path=WEBHOOK_PATH,
-        on_startup=on_startup,
-        on_shutdown=on_shutdown,
-        host=WEBAPP_HOST,
-        port=WEBAPP_PORT,
-        web_app=app
-    )
+    asyncio.run(main())
