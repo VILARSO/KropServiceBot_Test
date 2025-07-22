@@ -5,7 +5,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageNotModified, MessageToDeleteNotFound, BadRequest
 from aiogram import Bot # Імпортуємо Bot для типізації
 import logging # Додано імпорт logging
-import asyncio # Додано імпорт asyncio для затримки (хоча для цього варіанту вона менш критична)
+import asyncio # Додано імпорт asyncio для затримки
 
 # Регулярний вираз для перевірки номера телефону (приклад: +380XXXXXXXXX)
 # Це вже використовується в main.py, але залишено тут як приклад, якщо потрібно буде знову
@@ -28,44 +28,32 @@ def escape_markdown_v2(text: str) -> str:
 
 async def update_or_send_interface_message(bot_obj: Bot, chat_id: int, state: FSMContext, text: str, reply_markup=None, parse_mode='HTML', disable_web_page_preview: bool = False):
     """
-    Редагує існуюче повідомлення інтерфейсу або надсилає нове, якщо його немає.
-    Зберігає message_id останнього повідомлення бота у стані.
+    Видаляє попереднє повідомлення бота (якщо воно є) і надсилає нове.
+    Зберігає message_id нового повідомлення бота у стані.
     Приймає об'єкт bot як перший аргумент.
     """
     data = await state.get_data()
     last_bot_message_id = data.get('last_bot_message_id')
 
+    # Спроба видалити попереднє повідомлення бота
+    if last_bot_message_id:
+        try:
+            await bot_obj.delete_message(chat_id=chat_id, message_id=last_bot_message_id)
+            logging.info(f"Deleted old message {last_bot_message_id} for user {chat_id}.")
+            # Додаємо дуже коротку затримку, щоб дати Telegram клієнту час на обробку видалення
+            await asyncio.sleep(0.01) 
+        except MessageToDeleteNotFound:
+            logging.warning(f"Message {last_bot_message_id} not found to delete for user {chat_id}. It might have been deleted by user or Telegram.")
+        except Exception as e:
+            logging.error(f"Error deleting message {last_bot_message_id} for user {chat_id}: {e}", exc_info=True)
+        finally:
+            # Завжди очищаємо last_bot_message_id після спроби видалення,
+            # щоб наступне повідомлення завжди надсилалося як нове.
+            await state.update_data(last_bot_message_id=None) 
+
+    # Надсилаємо нове повідомлення
     try:
-        if last_bot_message_id:
-            # Спроба відредагувати існуюче повідомлення
-            message = await bot_obj.edit_message_text( # Використовуємо переданий bot_obj
-                chat_id=chat_id,
-                message_id=last_bot_message_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode,
-                disable_web_page_preview=disable_web_page_preview
-            )
-            logging.info(f"Edited existing interface message for user {chat_id}. Message ID: {last_bot_message_id}")
-        else:
-            # Надсилання нового повідомлення, якщо немає існуючого
-            message = await bot_obj.send_message( # Використовуємо переданий bot_obj
-                chat_id=chat_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode,
-                disable_web_page_preview=disable_web_page_preview
-            )
-            await state.update_data(last_bot_message_id=message.message_id)
-            logging.info(f"Sent new interface message for user {chat_id}. Message ID: {message.message_id}")
-    except MessageNotModified:
-        # Це нормальна ситуація, якщо текст або клавіатура не змінилися
-        logging.info(f"Message not modified for user {chat_id}. Message ID: {last_bot_message_id}")
-        pass 
-    except (MessageToDeleteNotFound, BadRequest) as e:
-        # Якщо повідомлення було видалено або є інші помилки редагування, надсилаємо нове
-        logging.warning(f"Failed to edit message {last_bot_message_id} for user {chat_id} (Error: {e}). Sending new message.")
-        message = await bot_obj.send_message( # Використовуємо переданий bot_obj
+        message = await bot_obj.send_message(
             chat_id=chat_id,
             text=text,
             reply_markup=reply_markup,
@@ -73,19 +61,12 @@ async def update_or_send_interface_message(bot_obj: Bot, chat_id: int, state: FS
             disable_web_page_preview=disable_web_page_preview
         )
         await state.update_data(last_bot_message_id=message.message_id)
-        logging.info(f"Sent new interface message (after edit failure) for user {chat_id}. Message ID: {message.message_id}")
+        logging.info(f"Sent new interface message for user {chat_id}. Message ID: {message.message_id}")
     except Exception as e:
-        logging.error(f"Unexpected error in update_or_send_interface_message for user {chat_id}: {e}", exc_info=True)
-        # У випадку будь-якої іншої непередбаченої помилки, спробуйте надіслати нове повідомлення як останній варіант
-        message = await bot_obj.send_message( # Використовуємо переданий bot_obj
-            chat_id=chat_id,
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=parse_mode,
-            disable_web_page_preview=disable_web_page_preview
-        )
-        await state.update_data(last_bot_message_id=message.message_id)
-        logging.info(f"Sent new interface message (after unexpected error) for user {chat_id}. Message ID: {message.message_id}")
+        logging.error(f"Failed to send new interface message for user {chat_id}: {e}", exc_info=True)
+        # У випадку критичної помилки надсилання нового повідомлення, логуємо і не оновлюємо state
+        # (щоб не перезаписати last_bot_message_id на None, якщо повідомлення не було надіслано)
+        pass
 
 
 def can_edit(post: dict) -> bool:
