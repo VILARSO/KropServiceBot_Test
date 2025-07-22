@@ -16,7 +16,7 @@ def categories_kb(is_post_creation: bool) -> InlineKeyboardMarkup:
     """Клавіатура для вибору категорії."""
     kb = InlineKeyboardMarkup(row_width=2)
     buttons = []
-    for i, cat in enumerate(CATEGORIES):
+    for i, cat in enumerate(CATEGORIES): # Перебираємо список категорій (рядків)
         if is_post_creation:
             buttons.append(InlineKeyboardButton(cat, callback_data=f'post_cat_{i}'))
         else:
