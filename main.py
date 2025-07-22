@@ -24,6 +24,18 @@ from keyboards import main_kb, categories_kb, confirm_add_post_kb, post_actions_
 # Імпортуємо update_or_send_interface_message, can_edit, get_next_sequence_value з utils
 from utils import escape_markdown_v2, update_or_send_interface_message, can_edit, get_next_sequence_value
 
+async def run_healthcheck_server():
+    async def handle_root(request):
+        return web.json_response({"status": "OK", "service": "CropServiceBot"})
+
+    app = web.Application()
+    app.router.add_get("/", handle_root)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, WEBAPP_HOST, WEBAPP_PORT)
+    await site.start()
+    logging.info("✅ Healthcheck endpoint доступний на '/'")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
 
@@ -684,8 +696,12 @@ async def err_handler(update: types.Update, exception):
 async def on_startup(dp_obj):
     logging.info("Запуск бота...")
     await init_db_connection()
+    await bot.delete_webhook()
+    await asyncio.sleep(1)
+    await bot.set_webhook(f"{WEBHOOK_HOST}{WEBHOOK_PATH}", drop_pending_updates=True)
 
-    WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+    # Додаємо обробку для root URL "/"
+    dp_obj._loop.create_task(run_healthcheck_server())
     
     # Явно видаляємо вебхук перед встановленням нового
     try:
@@ -746,4 +762,12 @@ async def main():
     )
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    logging.info("Starting webhook...")
+    start_webhook(
+        dispatcher=dp,
+        webhook_path=WEBHOOK_PATH,
+        on_startup=on_startup,
+        on_shutdown=on_shutdown,
+        host=WEBAPP_HOST,
+        port=WEBAPP_PORT,
+    )
