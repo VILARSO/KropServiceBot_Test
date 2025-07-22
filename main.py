@@ -717,11 +717,11 @@ async def on_startup(dp_obj):
     await asyncio.sleep(1)
 
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-    try:
-        await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-        logging.info(f"✅ Webhook встановлено: {WEBHOOK_URL}")
-    except Exception as e:
-        logging.error(f"❌ Помилка при встановленні webhook: {e}", exc_info=True)
+try:
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    logging.info(f"✅ Webhook встановлено: {WEBHOOK_URL}")
+except Exception as e:
+    logging.error(f"❌ Помилка при встановленні webhook: {e}", exc_info=True)
 
 # Виправлений try-блок — без зайвого відступу
 try:
