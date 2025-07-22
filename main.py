@@ -734,9 +734,15 @@ async def create_app():
 
 if __name__ == '__main__':
     logging.info("Starting webhook...")
-    app = asyncio.run(create_app())
-    app.router.add_get("/", handle_root)  # Додаємо відповідь на /
-    
+
+    # Створюємо aiohttp-додаток
+    app = web.Application()
+
+    # Безпечно додаємо маршрут "/", якщо його ще немає
+    if not any(r for r in app.router.routes() if r.method == 'GET' and str(r.resource) == '/'):
+        app.router.add_get("/", handle_root)
+
+    # Запускаємо бота
     start_webhook(
         dispatcher=dp,
         webhook_path=WEBHOOK_PATH,
@@ -744,5 +750,5 @@ if __name__ == '__main__':
         on_shutdown=on_shutdown,
         host=WEBAPP_HOST,
         port=WEBAPP_PORT,
-        web_app=app  # <-- це додає підтримку "/" на Railway
+        web_app=app
     )
