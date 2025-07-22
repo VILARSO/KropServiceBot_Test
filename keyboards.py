@@ -82,7 +82,8 @@ def pagination_kb(total_posts: int, offset: int, posts_per_page: int, action_pre
         else: # 'mypage'
             buttons.append(InlineKeyboardButton("⬅️ Попередня", callback_data=f'{action_prefix}_{offset - posts_per_page}'))
     else:
-        buttons.append(InlineKeyboardButton(" ", callback_data='ignore')) # Пуста кнопка для вирівнювання
+        # Додаємо пусту кнопку для вирівнювання, якщо немає попередньої сторінки
+        buttons.append(InlineKeyboardButton(" ", callback_data='ignore'))
 
     # Кнопка поточної сторінки
     current_page_num = offset // posts_per_page + 1
@@ -97,7 +98,8 @@ def pagination_kb(total_posts: int, offset: int, posts_per_page: int, action_pre
         else: # 'mypage'
             buttons.append(InlineKeyboardButton("Наступна ➡️", callback_data=f'{action_prefix}_{offset + posts_per_page}'))
     else:
-        buttons.append(InlineKeyboardButton(" ", callback_data='ignore')) # Пуста кнопка для вирівнювання
+        # Додаємо пусту кнопку для вирівнювання, якщо немає наступної сторінки
+        buttons.append(InlineKeyboardButton(" ", callback_data='ignore'))
 
     kb.row(*buttons) # Додаємо кнопки пагінації в один ряд
 
