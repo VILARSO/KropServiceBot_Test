@@ -717,8 +717,9 @@ async def on_startup(dp_obj):
     await asyncio.sleep(1)
 
     # Встановлюємо новий вебхук, скидаючи всі очікуючі оновлення
-    await bot.set_webhook(f"{WEBHOOK_HOST}{WEBHOOK_PATH}", drop_pending_updates=True)
-    logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
+    WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
 
     # Перевірка статусу вебхука після встановлення
     try:
