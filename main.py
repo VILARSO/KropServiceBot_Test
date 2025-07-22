@@ -716,10 +716,12 @@ async def on_startup(dp_obj):
     # Додаємо невелику паузу
     await asyncio.sleep(1)
 
-    # Встановлюємо новий вебхук, скидаючи всі очікуючі оновлення
-   WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+    try:
+        await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+        logging.info(f"✅ Webhook встановлено: {WEBHOOK_URL}")
+    except Exception as e:
+        logging.error(f"❌ Помилка при встановленні webhook: {e}", exc_info=True)
 
 # Виправлений try-блок — без зайвого відступу
 try:
