@@ -721,13 +721,11 @@ async def on_startup(dp_obj):
 await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
 logging.info(f"Webhook встановлено: {WEBHOOK_URL}")
 
-    # Перевірка статусу вебхука після встановлення
-    try:
-        webhook_info = await bot.get_webhook_info()
-        logging.info(f"DEBUG: Webhook info after setup: {webhook_info}")
-    except Exception as e:
-        logging.error(f"DEBUG: Failed to get webhook info after setup: {e}", exc_info=True)
-
+try:
+    webhook_info = await bot.get_webhook_info()
+    logging.info(f"DEBUG: Webhook info after setup: {webhook_info}")
+except Exception as e:
+    logging.error(f"DEBUG: Failed to get webhook info after setup: {e}", exc_info=True)
 
 async def on_shutdown(dp_obj):
     logging.info("Вимкнення бота...")
