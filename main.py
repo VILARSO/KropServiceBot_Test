@@ -704,7 +704,7 @@ async def on_startup(dp_obj):
     asyncio.get_event_loop().create_task(run_healthcheck_server())
 
     # Додаємо обробку для root URL "/"
-    dp_obj._loop.create_task(run_healthcheck_server())
+    asyncio.get_event_loop().create_task(run_healthcheck_server())
     
     # Явно видаляємо вебхук перед встановленням нового
     try:
