@@ -1,0 +1,60 @@
+diff --git a/main.py b/main.py
+index 1234567..89abcde 100644
+--- a/main.py
++++ b/main.py
+@@ -100,16 +100,38 @@ async def show_view_posts_page(bot_obj: Bot, chat_id: int, state: FSMContext, offse
+
+ # ======== Перегляд оголошень ========
+-@dp.callback_query_handler(lambda c: c.data == 'view_posts', state="*")
+-async def view_start(call: CallbackQuery, state: FSMContext):
+-    logging.info(f"User {call.from_user.id} initiated 'View Posts'.")
+-    await call.answer()
+-    # раніше тут йшов прямий перехід до категорій
+-    await update_or_send_interface_message(
+-        call.message.bot, call.message.chat.id, state,
+-        "🔎 Оберіть категорію:", categories_kb(is_post_creation=False)
+-    )
+-    await state.set_state(AppStates.VIEW_CAT)
++@dp.callback_query_handler(lambda c: c.data == 'view_posts', state="*")
++async def view_start(call: CallbackQuery, state: FSMContext):
++    logging.info(f"User {call.from_user.id} initiated 'View Posts'.")
++    await call.answer()
++    # Крок 1: спочатку обираємо тип оголошення (робота/послуга)
++    await update_or_send_interface_message(
++        call.message.bot, call.message.chat.id, state,
++        "🔎 Оберіть тип оголошень для пошуку:",
++        search_type_kb()
++    )
++    await state.set_state(AppStates.SEARCH_TYPE)
++
++
++# ======== Новий хендлер для вибору типу ========
++@dp.callback_query_handler(
++    lambda c: c.data.startswith('search_type:'), 
++    state=AppStates.SEARCH_TYPE
++)
++async def process_search_type(call: CallbackQuery, state: FSMContext):
++    logging.info(f"User {call.from_user.id} selected search type: {call.data}.")
++    await call.answer()
++    typ = call.data.split(':')[1]    # 'job' або 'service'
++    await state.update_data(search_type=typ)
++    # Крок 2: тепер обираємо категорію
++    await update_or_send_interface_message(
++        call.message.bot, call.message.chat.id, state,
++        f"Тип «{'Робота' if typ=='job' else 'Послуга'}» обрано.\n🔎 Оберіть категорію:",
++        categories_kb(is_post_creation=False)
++    )
++    await state.set_state(AppStates.VIEW_CAT)
++
++
+ @dp.callback_query_handler(lambda c: c.data.startswith('view_cat_'), state=AppStates.VIEW_CAT)
+ async def view_cat(call: CallbackQuery, state: FSMContext):
+     idx = int(call.data.split('_')[2])
+@@ -115,7 +137,7 @@ async def view_cat(call: CallbackQuery, state: FSMContext):
+     await state.update_data(current_view_category=cat_name, current_category_idx=idx)
+     await show_view_posts_page(call.message.bot, call.message.chat.id, state, 0)
+-    await state.set_state(AppStates.VIEW_LISTING)
++    await state.set_state(AppStates.VIEW_LISTING)
+
+
+ @dp.callback_query_handler(lambda c: c.data.startswith('viewpage_'), state=AppStates.VIEW_LISTING)
