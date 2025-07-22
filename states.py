@@ -14,3 +14,7 @@ class AppStates(StatesGroup):
     
     MY_POSTS_VIEW = State()
     EDIT_DESC = State()
+
+# Для пошуку за типом
+    SEARCH_TYPE = State()       # крок 1: обрати “робота”/“послуга”
+    SEARCH_CATEGORY = State()   # крок 2: обрати категорію
